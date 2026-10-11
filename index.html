@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f7f4ee" />
+    <title>Countertop | Food shop billing</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <main class="page-shell">
+      <section id="auth-screen" class="auth-layout">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true">C</div>
+          <span>COUNTERTOP</span>
+        </div>
+        <div class="auth-card">
+          <p class="eyebrow">YOUR SHOP, IN GOOD ORDER</p>
+          <h1 id="auth-title">Welcome back</h1>
+          <p class="muted">Sign in to create bills and see how your day is going.</p>
+          <form id="auth-form">
+            <label for="email">Username <span class="muted">(email address)</span></label>
+            <input id="email" name="email" type="email" autocomplete="username" required placeholder="you@example.com" />
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" minlength="6" required placeholder="At least 6 characters" />
+            <button id="auth-submit" class="button button-primary full-width" type="submit">Sign in</button>
+          </form>
+          <p id="auth-message" class="message" role="status"></p>
+          <p class="auth-switch"><span id="auth-switch-copy">New to Countertop?</span> <button id="auth-switch" class="text-button" type="button">Create an account</button></p>
+        </div>
+        <p class="auth-footnote">A simple, private counter for your food business.</p>
+      </section>
+
+      <section id="app-screen" class="app-screen hidden">
+        <header class="topbar">
+          <a class="brand-lockup brand-link" href="#" aria-label="Countertop home">
+            <span class="brand-mark" aria-hidden="true">C</span>
+            <span>COUNTERTOP</span>
+          </a>
+          <div class="topbar-right">
+            <span id="user-email" class="user-email"></span>
+            <button id="sign-out" class="button button-quiet" type="button">Sign out</button>
+          </div>
+        </header>
+
+        <div class="dashboard">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow" id="today-label">TODAY</p>
+              <h1>Your counter</h1>
+              <p class="muted">A clear view of today's sales and orders.</p>
+            </div>
+            <button id="refresh" class="button button-outline" type="button">Refresh</button>
+          </div>
+
+          <section class="summary-grid" aria-label="Today's summary">
+            <article class="summary-card">
+              <span class="summary-label">ORDERS</span>
+              <strong id="summary-orders">0</strong>
+              <span class="summary-note">Paid orders today</span>
+            </article>
+            <article class="summary-card">
+              <span class="summary-label">REVENUE</span>
+              <strong id="summary-revenue">$0.00</strong>
+              <span class="summary-note">Total sales today</span>
+            </article>
+            <article class="summary-card">
+              <span class="summary-label">PROFIT</span>
+              <strong id="summary-profit">$0.00</strong>
+              <span class="summary-note">Sales less item costs</span>
+            </article>
+            <article class="summary-card summary-highlight">
+              <span class="summary-label">PROFIT MARGIN</span>
+              <strong id="summary-margin">0%</strong>
+              <span class="summary-note">Profit as a share of sales</span>
+            </article>
+          </section>
+
+          <div class="workspace-grid">
+            <section class="panel order-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">NEW SALE</p>
+                  <h2>Create a bill</h2>
+                </div>
+                <span class="step-chip">01 / ORDER</span>
+              </div>
+              <form id="order-form">
+                <div id="menu-list" class="menu-list" aria-live="polite"></div>
+                <div class="order-total">
+                  <span>Bill total</span>
+                  <strong id="bill-total">$0.00</strong>
+                </div>
+                <button id="place-order" class="button button-primary full-width" type="submit">Create bill</button>
+                <p id="order-message" class="message" role="status"></p>
+              </form>
+            </section>
+
+            <section class="panel orders-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">YOUR ACTIVITY</p>
+                  <h2>Today's orders</h2>
+                </div>
+                <div class="orders-tools">
+                  <span id="orders-count" class="count-chip">0</span>
+                  <button id="export-orders" class="button button-outline" type="button">Download Excel CSV</button>
+                </div>
+              </div>
+              <div id="orders-list" class="orders-list" role="region" aria-label="Today's bills" tabindex="0"></div>
+              <p id="empty-orders" class="empty-state">No orders yet. Your first bill will show up here.</p>
+            </section>
+          </div>
+
+          <details class="panel menu-settings">
+            <summary class="settings-summary">
+              <span>
+                <span class="eyebrow">SHOP SETTINGS</span>
+                <span class="settings-title">Manage menu items</span>
+              </span>
+              <span class="settings-chevron" aria-hidden="true"></span>
+            </summary>
+            <div class="settings-content">
+              <div class="panel-heading">
+                <p class="muted">Add products, update prices and costs, or hide items from new bills.</p>
+                <button id="add-product" class="button button-primary" type="button">Add item</button>
+              </div>
+              <div id="product-list" class="product-list"></div>
+              <p id="empty-products" class="empty-state hidden">No menu items yet. Add your first item above.</p>
+            </div>
+          </details>
+        </div>
+      </section>
+      <div id="toast" class="toast hidden" role="status"></div>
+    </main>
+
+    <dialog id="receipt-dialog" class="receipt-dialog">
+      <div id="receipt-content"></div>
+      <div class="receipt-actions">
+        <button id="print-receipt" class="button button-primary" type="button">Print bill</button>
+        <button id="close-receipt" class="button button-quiet" type="button">Close</button>
+      </div>
+    </dialog>
+
+    <dialog id="product-dialog" class="product-dialog">
+      <form id="product-form">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">MENU ITEM</p>
+            <h2 id="product-dialog-title">Add item</h2>
+          </div>
+        </div>
+        <input id="product-id" type="hidden" />
+        <label for="product-name">Item name</label>
+        <input id="product-name" type="text" maxlength="100" required />
+        <label for="product-price">Selling price</label>
+        <input id="product-price" type="number" min="0" step="0.01" required />
+        <label for="product-cost">Item cost</label>
+        <input id="product-cost" type="number" min="0" step="0.01" required />
+        <p id="product-message" class="message" role="status"></p>
+        <div class="receipt-actions">
+          <button id="save-product" class="button button-primary" type="submit">Save item</button>
+          <button id="cancel-product" class="button button-quiet" type="button">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
+</html>
