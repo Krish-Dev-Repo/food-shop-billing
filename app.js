@@ -19,6 +19,11 @@
   let products = [];
   let manageableProducts = [];
   let dailyOrders = [];
+  let historicalOrders = [];
+  let historyCursor;
+  let historyStart;
+  let hasMoreHistoricalOrders = true;
+  let loadingHistoricalOrders = false;
   let toastTimer;
   let signingUp = false;
   let currentUser;
@@ -110,12 +115,51 @@
     document.querySelector("#bill-total").textContent = money(total);
   };
 
-  const localDayRange = () => {
-    const start = new Date();
+  const localDayRange = (date = new Date()) => {
+    const start = new Date(date);
     start.setHours(0, 0, 0, 0);
     const end = new Date(start);
     end.setDate(end.getDate() + 1);
     return { start: start.toISOString(), end: end.toISOString() };
+  };
+
+  const orderSelect = "id,created_at,nickname,total,total_cost,order_items(name,quantity,unit_price,unit_cost)";
+  const historicalPageSize = 30;
+
+  const renderOrder = (order, isToday, index) => {
+    const date = new Date(order.created_at);
+    const time = new Intl.DateTimeFormat(undefined, {
+      ...(isToday ? {} : { month: "short", day: "numeric", year: "numeric" }),
+      hour: "numeric",
+      minute: "2-digit"
+    }).format(date);
+    const billNumber = isToday
+      ? `ORDER ${String(dailyOrders.length - index).padStart(3, "0")}`
+      : `BILL · ${new Intl.DateTimeFormat(undefined, { dateStyle: "short" }).format(date)}`;
+    const label = order.nickname || billNumber;
+    return `<article class="order-item">
+      <span class="order-number" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
+      <time class="order-time" datetime="${escapeHtml(order.created_at)}">${time}</time>
+      <span class="order-value">${money(order.total)}</span>
+      <button class="text-button view-bill" type="button" data-order-id="${escapeHtml(order.id)}"
+        aria-label="View ${escapeHtml(order.nickname || billNumber)}">View bill</button>
+    </article>`;
+  };
+
+  const renderOrders = () => {
+    ordersList.innerHTML = [
+      ...dailyOrders.map((order, index) => renderOrder(order, true, index)),
+      ...historicalOrders.map((order, index) => renderOrder(order, false, index))
+    ].join("");
+    document.querySelector("#orders-count").textContent = String(dailyOrders.length + historicalOrders.length);
+    document.querySelector("#empty-orders").classList.toggle(
+      "hidden",
+      dailyOrders.length + historicalOrders.length > 0
+    );
+    document.querySelector("#load-older-orders").classList.toggle("hidden", !hasMoreHistoricalOrders);
+    document.querySelector("#history-status").textContent = hasMoreHistoricalOrders
+      ? ""
+      : "You've reached the oldest bill.";
   };
 
   const loadDashboard = async () => {
@@ -123,34 +167,68 @@
       const { start, end } = localDayRange();
       const { data, error } = await supabaseClient
         .from("orders")
-        .select("id,created_at,total,total_cost,order_items(name,quantity,unit_price,unit_cost)")
+        .select(orderSelect)
         .gte("created_at", start)
         .lt("created_at", end)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false });
       if (error) throw error;
-      const orders = data || [];
-      dailyOrders = orders;
+      dailyOrders = data || [];
+      historicalOrders = [];
+      historyCursor = undefined;
+      historyStart = start;
+      hasMoreHistoricalOrders = true;
+      loadingHistoricalOrders = false;
+      renderOrders();
+      ordersList.scrollTop = 0;
+      const orders = dailyOrders;
       const revenue = orders.reduce((sum, order) => sum + Number(order.total), 0);
       const profit = orders.reduce((sum, order) => sum + Number(order.total) - Number(order.total_cost), 0);
       document.querySelector("#summary-orders").textContent = String(orders.length);
       document.querySelector("#summary-revenue").textContent = money(revenue);
       document.querySelector("#summary-profit").textContent = money(profit);
       document.querySelector("#summary-margin").textContent = `${revenue ? (profit / revenue * 100).toFixed(1) : "0"}%`;
-      document.querySelector("#orders-count").textContent = String(orders.length);
-      document.querySelector("#empty-orders").classList.toggle("hidden", orders.length > 0);
-      ordersList.innerHTML = orders.map((order, index) => {
-        const time = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(order.created_at));
-        return `<article class="order-item">
-          <span class="order-number">ORDER ${String(orders.length - index).padStart(3, "0")}</span>
-          <time class="order-time" datetime="${escapeHtml(order.created_at)}">${time}</time>
-          <span class="order-value">${money(order.total)}</span>
-          <button class="text-button view-bill" type="button" data-order-id="${escapeHtml(order.id)}"
-            aria-label="View bill ${String(orders.length - index).padStart(3, "0")}">View bill</button>
-        </article>`;
-      }).join("");
       await loadProducts();
     } catch (error) {
       showToast(`Could not load shop data: ${error.message}`);
+    }
+  };
+
+  const loadMoreHistoricalOrders = async () => {
+    if (loadingHistoricalOrders || !hasMoreHistoricalOrders || !historyStart) return;
+    loadingHistoricalOrders = true;
+    const loadButton = document.querySelector("#load-older-orders");
+    const status = document.querySelector("#history-status");
+    loadButton.disabled = true;
+    status.textContent = "Loading older bills…";
+    try {
+      let query = supabaseClient
+        .from("orders")
+        .select(orderSelect)
+        .lt("created_at", historyStart)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(historicalPageSize);
+      if (historyCursor) {
+        query = query.or(
+          `created_at.lt.${historyCursor.created_at},and(created_at.eq.${historyCursor.created_at},id.lt.${historyCursor.id})`
+        );
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      const page = data || [];
+      if (page.length) {
+        historicalOrders.push(...page);
+        historyCursor = page[page.length - 1];
+      }
+      hasMoreHistoricalOrders = page.length === historicalPageSize;
+      renderOrders();
+    } catch (error) {
+      status.textContent = "Could not load older bills. Try again.";
+      showToast(`Could not load older bills: ${error.message}`);
+    } finally {
+      loadingHistoricalOrders = false;
+      loadButton.disabled = false;
     }
   };
 
@@ -168,7 +246,10 @@
         <div class="brand-lockup"><span class="brand-mark">C</span><span>COUNTERTOP</span></div>
         <h2>Thank you!</h2><p>Your order is confirmed.</p>
       </div>
-      <div class="receipt-meta"><span>Bill #${String(orderNumber).padStart(3, "0")}</span><span>${escapeHtml(date)}</span></div>
+      <div class="receipt-meta">
+        <span>Bill #${String(orderNumber).padStart(3, "0")}${order.nickname ? ` · ${escapeHtml(order.nickname)}` : ""}</span>
+        <span>${escapeHtml(date)}</span>
+      </div>
       ${lines}
       <div class="receipt-total"><span>Total</span><span>${money(order.total)}</span></div>
       <p class="receipt-thanks">We appreciate your visit.</p>`;
@@ -237,6 +318,12 @@
   });
 
   document.querySelector("#refresh").addEventListener("click", loadDashboard);
+  document.querySelector("#load-older-orders").addEventListener("click", loadMoreHistoricalOrders);
+  ordersList.addEventListener("scroll", () => {
+    if (ordersList.scrollTop + ordersList.clientHeight >= ordersList.scrollHeight - 40) {
+      loadMoreHistoricalOrders();
+    }
+  });
   menuList.addEventListener("input", updateTotal);
 
   const openProductDialog = (product) => {
@@ -320,7 +407,7 @@
       if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
       return `"${text.replace(/"/g, '""')}"`;
     };
-    const rows = [["Bill", "Date and time", "Item", "Quantity", "Unit price", "Line total", "Bill total", "Bill profit"]];
+    const rows = [["Bill", "Nickname", "Date and time", "Item", "Quantity", "Unit price", "Line total", "Bill total", "Bill profit"]];
     dailyOrders.forEach((order, index) => {
       const billNumber = `Bill ${String(dailyOrders.length - index).padStart(3, "0")}`;
       const timestamp = new Intl.DateTimeFormat(undefined, {
@@ -328,6 +415,7 @@
       }).format(new Date(order.created_at));
       (order.order_items || []).forEach((item) => rows.push([
         billNumber,
+        order.nickname || "",
         timestamp,
         item.name,
         item.quantity,
@@ -358,28 +446,39 @@
     const selected = [...menuList.querySelectorAll(".quantity-input")]
       .map((input) => ({ product_id: input.dataset.productId, quantity: Number.parseInt(input.value, 10) || 0 }))
       .filter((item) => item.quantity > 0);
+    const nickname = document.querySelector("#bill-nickname").value.trim();
     if (!selected.length) {
       setMessage(orderMessage, "Add at least one item to create a bill.");
+      return;
+    }
+    if (nickname.length > 80) {
+      setMessage(orderMessage, "Bill nicknames must be 80 characters or fewer.");
       return;
     }
     const button = document.querySelector("#place-order");
     button.disabled = true;
     setMessage(orderMessage, "");
     try {
-      const { data, error } = await supabaseClient.rpc("create_order", { p_items: selected });
+      const { data, error } = await supabaseClient.rpc("create_order", {
+        p_items: selected,
+        p_nickname: nickname || null
+      });
       if (error) throw error;
       const { data: order, error: orderError } = await supabaseClient
         .from("orders")
-        .select("id,created_at,total,total_cost,order_items(name,quantity,unit_price,unit_cost)")
+        .select(orderSelect)
         .eq("id", data)
         .single();
       if (orderError) throw orderError;
-      const { data: todayOrders, error: todayError } = await supabaseClient
+      const { start, end } = localDayRange(new Date(order.created_at));
+      const { count, error: countError } = await supabaseClient
         .from("orders")
-        .select("id")
-        .gte("created_at", localDayRange().start);
-      if (todayError) throw todayError;
-      renderReceipt(order, todayOrders.length);
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", start)
+        .lt("created_at", end);
+      if (countError) throw countError;
+      if (count === null) throw new Error("Could not determine the bill number.");
+      renderReceipt(order, count);
       orderForm.reset();
       updateTotal();
       await loadDashboard();
@@ -395,23 +494,28 @@
     if (!button) return;
     const { data, error } = await supabaseClient
       .from("orders")
-      .select("id,created_at,total,total_cost,order_items(name,quantity,unit_price,unit_cost)")
+      .select(orderSelect)
       .eq("id", button.dataset.orderId)
       .single();
     if (error) {
       showToast(`Could not open bill: ${error.message}`);
       return;
     }
-    const { data: earlierOrders, error: countError } = await supabaseClient
+    const { start } = localDayRange(new Date(data.created_at));
+    const { count, error: countError } = await supabaseClient
       .from("orders")
-      .select("id")
-      .gte("created_at", localDayRange().start)
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", start)
       .lte("created_at", data.created_at);
     if (countError) {
       showToast(`Could not load bill number: ${countError.message}`);
       return;
     }
-    renderReceipt(data, earlierOrders.length);
+    if (count === null) {
+      showToast("Could not determine the bill number.");
+      return;
+    }
+    renderReceipt(data, count);
   });
 
   document.querySelector("#print-receipt").addEventListener("click", () => window.print());

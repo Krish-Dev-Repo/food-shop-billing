@@ -90,6 +90,9 @@
               </div>
               <form id="order-form">
                 <div id="menu-list" class="menu-list" aria-live="polite"></div>
+                <label for="bill-nickname">Bill nickname <span class="muted">(optional)</span></label>
+                <input id="bill-nickname" name="nickname" type="text" maxlength="80"
+                  placeholder="e.g. Catering order for Meena" autocomplete="off" />
                 <div class="order-total">
                   <span>Bill total</span>
                   <strong id="bill-total">$0.00</strong>
@@ -103,15 +106,18 @@
               <div class="panel-heading">
                 <div>
                   <p class="eyebrow">YOUR ACTIVITY</p>
-                  <h2>Today's orders</h2>
+                  <h2>Bills</h2>
+                  <p class="muted">Today's bills appear first. Scroll to load older bills.</p>
                 </div>
                 <div class="orders-tools">
                   <span id="orders-count" class="count-chip">0</span>
                   <button id="export-orders" class="button button-outline" type="button">Download Excel CSV</button>
                 </div>
               </div>
-              <div id="orders-list" class="orders-list" role="region" aria-label="Today's bills" tabindex="0"></div>
-              <p id="empty-orders" class="empty-state">No orders yet. Your first bill will show up here.</p>
+              <div id="orders-list" class="orders-list" role="region" aria-label="Bills, newest first" tabindex="0"></div>
+              <p id="empty-orders" class="empty-state">No bills yet. Your first bill will show up here.</p>
+              <button id="load-older-orders" class="button button-outline full-width" type="button">Load older bills</button>
+              <p id="history-status" class="history-status" role="status" aria-live="polite"></p>
             </section>
           </div>
 

@@ -16,8 +16,11 @@ create table if not exists public.orders (
   owner_id uuid not null references auth.users(id) on delete cascade,
   total numeric(10, 2) not null check (total >= 0),
   total_cost numeric(10, 2) not null check (total_cost >= 0),
+  nickname text,
   created_at timestamptz not null default now()
 );
+
+alter table public.orders add column if not exists nickname text;
 
 create table if not exists public.order_items (
   id uuid primary key default gen_random_uuid(),
@@ -82,7 +85,9 @@ begin
 end;
 $$;
 
-create or replace function public.create_order(p_items jsonb)
+drop function if exists public.create_order(jsonb);
+
+create or replace function public.create_order(p_items jsonb, p_nickname text default null)
 returns uuid
 language plpgsql
 security definer
@@ -96,9 +101,13 @@ declare
   item_quantity integer;
   order_total numeric(10, 2) := 0;
   order_cost numeric(10, 2) := 0;
+  order_nickname text := nullif(btrim(coalesce(p_nickname, '')), '');
 begin
   if current_owner is null then
     raise exception 'Sign in before creating an order';
+  end if;
+  if char_length(order_nickname) > 80 then
+    raise exception 'Bill nicknames must be 80 characters or fewer';
   end if;
   if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
     raise exception 'An order must contain at least one item';
@@ -124,8 +133,8 @@ begin
     order_cost := order_cost + selected_product.cost * item_quantity;
   end loop;
 
-  insert into public.orders (owner_id, total, total_cost)
-  values (current_owner, order_total, order_cost)
+  insert into public.orders (owner_id, total, total_cost, nickname)
+  values (current_owner, order_total, order_cost, order_nickname)
   returning id into new_order_id;
 
   for item in select value from jsonb_array_elements(p_items)
@@ -154,9 +163,9 @@ end;
 $$;
 
 revoke all on function public.seed_default_products() from public;
-revoke all on function public.create_order(jsonb) from public;
+revoke all on function public.create_order(jsonb, text) from public;
 grant execute on function public.seed_default_products() to authenticated;
-grant execute on function public.create_order(jsonb) to authenticated;
+grant execute on function public.create_order(jsonb, text) to authenticated;
 
 grant select, insert, update, delete on public.products to authenticated;
 grant select on public.orders, public.order_items to authenticated;

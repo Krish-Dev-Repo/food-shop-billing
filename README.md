@@ -36,7 +36,9 @@ The sign-in **username is the owner's email address**. Supabase handles password
 3. Right-click `index.html` and choose **Open with Live Server**. Use the local web address that opens; do not open the HTML as a `file://` URL.
 4. Choose **Create an account**, register with the shop owner's email and password, confirm the email if prompted, then sign in.
 5. The sample menu is created automatically on first sign-in. Use **Manage menu items** in the app to add items, edit their names/prices/costs, or hide them from future bills. Hidden items and existing bills are preserved.
-6. Select quantities and choose **Create bill**. Bills can be printed; orders and their price/cost snapshots are saved in Supabase. Today's orders appear in a compact scrollable list; select **View bill** to open a receipt. **Shop settings** stays collapsed until opened. Use **Download Excel CSV** in Today's orders to download today's bill line items and totals to a file that opens in Excel.
+6. Select quantities, optionally enter a bill nickname, and choose **Create bill**. Bills can be printed; orders, nicknames, and price/cost snapshots are saved in Supabase. Today's bills load first; scroll to the bottom or choose **Load older bills** to fetch historical bills in pages. Select **View bill** to open a receipt. **Shop settings** stays collapsed until opened. Use **Download Excel CSV** in Bills to download today's bill line items, nicknames, and totals to a file that opens in Excel.
+
+If the database was set up before bill nicknames were added, run the updated `supabase/schema.sql` in the Supabase SQL Editor before deploying the app update. The script adds the nullable nickname field and replaces the order-creation function; existing bills are kept and display their bill number as usual.
 
 ## 3. Deploy free online
 
@@ -60,8 +62,8 @@ The sign-in **username is the owner's email address**. Supabase handles password
 - **Profit:** order total minus the saved ingredient/item costs.
 - **Profit margin:** profit divided by revenue, shown as a percentage (0% when there are no sales).
 
-Daily totals follow the local browser's calendar day. Each order saves the item name, quantity, sale price, and cost as a snapshot, so later menu price changes do not rewrite old bills.
-Daily bill downloads are CSV files that can be opened in Excel or most spreadsheet apps. The app does not email exports; automatic email delivery would require a trusted server-side email service rather than exposing email credentials in the browser.
+Daily totals follow the local browser's calendar day and only include today's bills, even when older bills have been loaded into the list. Each order saves the optional nickname, item name, quantity, sale price, and cost as a snapshot, so later menu price changes do not rewrite old bills. Nicknames are optional and limited to 80 characters; a blank nickname leaves the bill number as its identifier.
+Daily bill downloads are CSV files that can be opened in Excel or most spreadsheet apps; they include the nickname when one was provided. The app does not email exports; automatic email delivery would require a trusted server-side email service rather than exposing email credentials in the browser.
 
 ## Notes
 
